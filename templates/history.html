@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}History - Drug Repurposing{% endblock %}
+
+{% block content %}
+<div class="min-h-screen">
+    <nav class="bg-white shadow-sm py-4 px-6">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center">
+                <span class="text-2xl">🧬</span>
+                <h1 class="text-xl font-bold ml-2">Drug Repurposing</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="/query" class="text-gray-600 hover:text-coral">Back to Chat</a>
+                <button onclick="logout()" class="text-coral hover:text-red-600 flex items-center">
+                    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Log out
+                </button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="max-w-6xl mx-auto py-12 px-6">
+        <h2 class="text-3xl font-bold mb-8">Report History</h2>
+        
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-coral"></div>
+            <p class="mt-4 text-gray-600">Loading reports...</p>
+        </div>
+        
+        <div id="reportsList" class="hidden space-y-4">
+        </div>
+        
+        <div id="emptyState" class="hidden text-center py-12">
+            <p class="text-gray-500 text-lg">No reports yet. <a href="/query" class="text-coral hover:underline">Create your first query!</a></p>
+        </div>
+        
+        <div id="errorMessage" class="p-4 bg-red-100 text-red-700 rounded-lg hidden"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/history.js"></script>
+{% endblock %}

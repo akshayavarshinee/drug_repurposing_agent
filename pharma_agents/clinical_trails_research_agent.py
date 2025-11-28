@@ -1,0 +1,238 @@
+from agents import Agent, function_tool
+import requests
+import json
+import os
+import dotenv
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+
+dotenv.load_dotenv(override=True)
+
+# INSTRUCTIONS = (
+#     """
+#     You specialize in ClinicalTrials.gov for repurposing research.
+#     You identify opportunities where the drug shows signals in unrelated diseases,
+#     failed trials with positive subgroup signals, and biomarker-based efficacy hints.
+#     You ALWAYS use real clinical trial data—never fabrications. You should not just fetch results but also provide
+#     interpretation and analysis of the data. You output should be suitable for an academic publication.
+#     Identify completed, terminated, ongoing, and off-label exploration trials for
+#     repurposing potential. Extract endpoints, biomarkers, adverse events,
+#     comorbidity outcomes, and subgroup effects useful for repurposing evaluation.
+#     ADDITIONAL INSTRUCTIONS:
+#     - You MUST NOT call your tool more than 3 times per query attempt.
+#     - If you already attempted 3 times, summarize failure and stop.
+#     """
+# )
+
+INSTRUCTIONS= """
+    You are a clinical trial intelligence agent specializing in global drug repurposing insights
+    using clinicaltrials.gov.
+
+    CAPABILITIES:
+    - Discover repurposing signals from therapeutic areas *different* from the original query disease.
+    - Detect practical repurposing opportunities from:
+      • Completed or positive-endpoint trials in mechanistically adjacent but clinically distinct diseases  
+      • Terminated or failed trials that reveal useful **subgroup, biomarker, or secondary endpoint signals**  
+      • Unexpected comorbidity improvements (e.g., lipid, weight, inflammatory, neuro or renal outcomes)  
+      • Endpoint + biomarker insights that can be operationalized into real-world protocols
+
+    STRICT RULES:
+    - Always retrieve REAL, factual clinical trial signals using your tool.
+    - Do NOT fabricate trial names, phases, endpoints, biomarkers, or regulatory claims.
+    - Never present hypotheses as validated evidence unless supported by tool results.
+    - Always separate findings into:
+      ✅ **Evidence-backed signals**
+      💭 **Emerging but unverified mechanistic hypotheses**
+      ⚠️ **Clinically significant safety or feasibility risks**
+    - Limit tool attempts:
+      • You MUST NOT call your clinical trial tool more than 3 times per single query attempt.
+      • If 3 attempts are completed and still no valid response, summarize failure briefly and stop.
+
+    OUTPUT REQUIREMENTS:
+    Your response must be designed for practical research execution and academic reporting, including:
+
+    1. **Repurposing Signal Snapshot**
+       - List 2–5 realistic repurposing signals seen in non-original diseases (if supported by data)
+       - Classify each signal overlap strength qualitatively: high / medium / low with clear reason
+       - Assign a **Feasibility Score** between 0.0 and 1.0 (1.0 = closest to immediate translation)
+
+    2. **Endpoint & Biomarker Extraction**
+       - Extract primary and secondary endpoints that matter for repurposing practicality
+       - Highlight biomarkers or surrogate signals that can be used in experiments or patient selection
+         (e.g., HbA1c, ALT/AST, GFR, CRP, weight/BMI, HOMA-IR, or any clinically measured biomarker if data exists)
+       - Map endpoints to repurposing value, not just restate them
+
+    3. **Subgroup & Population Intelligence**
+       - Identify *subpopulations* with positive or distinct effect signals that could support a repurposing path
+       - Highlight recruiting regions or geographies under-explored in trials that may serve practical white space
+         for extrapolated global repurposing validation
+
+    4. **Failure Signal Mining (if applicable)**
+       - If trial termination or failure exists, extract:
+         • Evidence hinting WHY it failed (dose, endpoint mismatch, toxicity, design flaw)
+         • Biomarker or subgroup signals that were *still positive*
+         • Practical lessons to avoid repeating the same failure in repurposing pipeline
+
+    5. **Safety & Real-World Deployment Flags**
+       - Extract serious safety issues or risk patterns tied to feasibility
+       - Identify interaction-classes or contraindications that may affect clinical redeployment practicality
+
+    6. **Next-Step Practical Validation**
+       - Propose concrete experiments or data-validation steps the research team can implement, such as:
+         • Retrospective cohort mining for secondary endpoints
+         • Biomarker-driven patient stratification for new indication
+         • Surrogate endpoint justification for regulatory fast-track feasibility
+         (*only suggest when it logically corresponds to the retrieved signals*)
+
+    7. **Repurposing Practical Score (Final Output)**
+       - Provide ONE final **Repurposing Practical Score** between 0.0 and 1.0 summarizing:
+         mechanistic adjacency + clinical signal strength + real-world feasibility + safety practicality
+
+    EXAMPLES OF GOOD OUTPUT TONE:
+       “A Phase 2 obesity study showed significant HbA1c reduction in subgroup patients with baseline insulin resistance—
+       suggesting a high-quality signal for metabolic redeployment. A practical re-entry path could use HOMA-IR for patient
+       selection refinement. Feasibility Score: 0.82.”
+
+    You are a global research agent—always contextualize insights with worldwide clinical redeployment practicality.
+
+"""
+
+class ClinicalTrialsToolInput(BaseModel):
+    condition: Optional[str] = None
+    intervention: Optional[str] = None
+    phase: Optional[List[str]] = None
+    status: Optional[List[str]] = None
+    sponsor: Optional[str] = None
+    location: Optional[str] = None
+    study_type: Optional[str] = None
+    fields: Optional[List[str]] = None
+    page_size: Optional[int] = 20
+    page_token: Optional[str] = None
+    sort: Optional[List[str]] = None
+
+@function_tool
+def clinical_trials_research_tool(input: ClinicalTrialsToolInput):
+    """Search ClinicalTrials.gov for clinical trial data.
+    
+    Args:
+        input: Search parameters for clinical trials
+    """
+    url = "https://clinicaltrials.gov/api/v2/studies"
+
+    # Extract values from input
+    condition = input.condition
+    intervention = input.intervention
+    phase = input.phase
+    status = input.status
+    sponsor = input.sponsor
+    location = input.location
+    study_type = input.study_type
+    fields = input.fields
+    page_size = input.page_size or 20
+    page_token = input.page_token
+    sort = input.sort
+
+    params: Dict[str, Any] = {
+        "format": "json",
+        "pageSize": min(max(page_size, 1), 1000)
+    }
+
+    # -----------------------------
+    # Query parameters
+    # -----------------------------
+    if condition:
+        params["query.cond"] = condition
+
+    if intervention:
+        params["query.intr"] = intervention
+
+    if sponsor:
+        params["query.lead"] = sponsor
+
+    if location:
+        params["query.locn"] = location
+
+    if study_type:
+        params["query.type"] = study_type
+
+    # -----------------------------
+    # Advanced filters (correct v2 format)
+    # -----------------------------
+    filter_parts = []
+
+    if phase:
+        filter_parts.append(f"phase:{','.join(phase)}")
+
+    if status:
+        filter_parts.append(f"overallStatus:{','.join(status)}")
+
+    if filter_parts:
+        params["filter.advanced"] = " AND ".join(filter_parts)
+
+    # -----------------------------
+    # Field selection
+    # -----------------------------
+    if fields:
+        params["fields"] = ",".join(fields)
+
+    # Pagination
+    if page_token:
+        params["pageToken"] = page_token
+
+    # Sorting
+    if sort:
+        params["sort"] = ",".join(sort)
+
+    # Must have at least one search parameter
+    if not any([condition, intervention, sponsor, location, study_type, phase, status]):
+        return {"error": "At least one search parameter must be provided"}
+
+    headers = {"User-Agent": "pharma-researcher/1.0"}
+
+    # -----------------------------
+    # Execute request
+    # -----------------------------
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        result = {
+            "_query_metadata": {
+                "condition": condition,
+                "intervention": intervention,
+                "phase": phase,
+                "status": status,
+                "sponsor": sponsor,
+                "location": location,
+                "study_type": study_type,
+                "fields": fields,
+                "page_size": page_size,
+                "total_count": data.get("totalCount"),
+                "returned": len(data.get("studies", [])),
+                "next_page_token": data.get("nextPageToken")
+            }
+        }
+
+        result.update(data)
+        return result
+
+    except requests.exceptions.HTTPError as e:
+        return {
+            "error": f"ClinicalTrials.gov API HTTP {e.response.status_code}",
+            "details": e.response.text[:500],
+            "params": params
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Unexpected error: {str(e)}",
+            "params": params
+        }
+
+clinical_trials_agent = Agent(
+    name="clinical_trials_research_agent",
+    instructions=INSTRUCTIONS,
+    model="gpt-4o-mini",
+    tools=[clinical_trials_research_tool]
+)

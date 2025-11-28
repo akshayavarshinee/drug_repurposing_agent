@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Drug Repurposing - Welcome{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-lg p-12 max-w-md w-full text-center">
+        <div class="mb-6">
+            <div class="flex items-center justify-center mb-4">
+                <span class="text-3xl">🧬</span>
+                <h1 class="text-2xl font-bold ml-2">Drug Repurposing</h1>
+            </div>
+            <h2 class="text-xl font-semibold mb-2">Welcome Researcher!</h2>
+            <p class="text-gray-600">Discover potential drug candidates for diseases, genes and new indications</p>
+        </div>
+        
+        <div class="space-y-3">
+            <a href="/signup" class="block w-full bg-coral text-white py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition">
+                Create Account
+            </a>
+            <a href="/login" class="block w-full bg-white text-coral py-3 px-6 rounded-lg font-semibold border-2 border-coral hover:bg-coral hover:text-white transition">
+                Sign In
+            </a>
+        </div>
+        
+        <div class="mt-8 pt-6 border-t border-gray-200">
+            <p class="text-sm text-gray-500">Drug icons created by Freepik - Flaticon</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

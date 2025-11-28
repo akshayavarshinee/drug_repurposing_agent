@@ -1,0 +1,112 @@
+{% extends "base.html" %} {% block title %}Results - Drug Repurposing{% endblock
+%} {% block content %}
+<div class="min-h-screen">
+  <nav class="bg-white shadow-sm py-4 px-6">
+    <div class="max-w-6xl mx-auto flex justify-between items-center">
+      <div class="flex items-center">
+        <span class="text-2xl">🧬</span>
+        <h1 class="text-xl font-bold ml-2">Drug Repurposing</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <a href="/query" class="text-gray-600 hover:text-coral">Back to Chat</a>
+        <a
+          href="/history"
+          class="text-gray-600 hover:text-coral flex items-center"
+        >
+          <svg
+            class="w-5 h-5 mr-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            ></path>
+          </svg>
+          History
+        </a>
+        <button
+          onclick="logout()"
+          class="text-coral hover:text-red-600 flex items-center"
+        >
+          <svg
+            class="w-5 h-5 mr-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            ></path>
+          </svg>
+          Log out
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-5xl mx-auto py-12 px-6">
+    <div id="loading" class="text-center py-12">
+      <div
+        class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-coral"
+      ></div>
+      <p class="mt-4 text-gray-600">Loading report...</p>
+    </div>
+
+    <div id="reportContent" class="hidden">
+      <div class="bg-white rounded-lg shadow-lg p-8 mb-6">
+        <div class="flex justify-between items-start mb-6">
+          <div>
+            <h2 id="reportTitle" class="text-2xl font-bold mb-2"></h2>
+            <p id="reportQuestion" class="text-gray-600 mb-1"></p>
+            <p id="reportDate" class="text-sm text-gray-500"></p>
+          </div>
+          <!-- <div class="flex space-x-2">
+            <button
+              onclick="downloadPDF()"
+              class="px-4 py-2 bg-coral text-white rounded-lg hover:bg-opacity-90 transition"
+            >
+              Download PDF
+            </button>
+          </div> -->
+        </div>
+
+        <div class="prose max-w-none" id="reportText"></div>
+      </div>
+
+      <!-- <div class="bg-white rounded-lg shadow-lg p-8">
+        <h3 class="text-xl font-bold mb-4">Visualizations</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div
+            class="h-64 bg-gray-100 rounded-lg flex items-center justify-center"
+          >
+            <p class="text-gray-400">Chart placeholder</p>
+          </div>
+          <div
+            class="h-64 bg-gray-100 rounded-lg flex items-center justify-center"
+          >
+            <p class="text-gray-400">Graph placeholder</p>
+          </div>
+        </div>
+        <p class="text-sm text-gray-500 mt-4">
+          Data visualizations will be added in future updates
+        </p>
+      </div> -->
+    </div>
+
+    <div
+      id="errorMessage"
+      class="p-4 bg-red-100 text-red-700 rounded-lg hidden"
+    ></div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/static/js/results.js"></script>
+{% endblock %}
