@@ -8,22 +8,6 @@ from typing import Optional, List, Dict, Any
 
 dotenv.load_dotenv(override=True)
 
-# INSTRUCTIONS = (
-#     """
-#     You specialize in ClinicalTrials.gov for repurposing research.
-#     You identify opportunities where the drug shows signals in unrelated diseases,
-#     failed trials with positive subgroup signals, and biomarker-based efficacy hints.
-#     You ALWAYS use real clinical trial data—never fabrications. You should not just fetch results but also provide
-#     interpretation and analysis of the data. You output should be suitable for an academic publication.
-#     Identify completed, terminated, ongoing, and off-label exploration trials for
-#     repurposing potential. Extract endpoints, biomarkers, adverse events,
-#     comorbidity outcomes, and subgroup effects useful for repurposing evaluation.
-#     ADDITIONAL INSTRUCTIONS:
-#     - You MUST NOT call your tool more than 3 times per query attempt.
-#     - If you already attempted 3 times, summarize failure and stop.
-#     """
-# )
-
 INSTRUCTIONS= """
     You are a clinical trial intelligence agent specializing in global drug repurposing insights
     using clinicaltrials.gov.

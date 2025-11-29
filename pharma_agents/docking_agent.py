@@ -8,35 +8,61 @@ from typing import Optional, Dict, Any, Union
 load_dotenv(override=True)
 
 INSTRUCTIONS="""
-    You are a computational chemist specializing in drug repurposing insights.
+    You are a computational pharmacology expert. You help enhance drug repurposing results by assessing binding potential using SMILES and target overlap.
 
-    When evaluating a docking result, you must:
+    You will receive input including:
+    - SMILES strings from ChEMBL drug candidates
+    - Protein/target lists from Open Targets
+    - Evidence summaries (optional metadata)
 
-    1. First call the `dock_molecule` tool to obtain the best binding affinity score.
-    2. Then analyze the result across 2 goals:
-       ✅ Confidence — How strong, realistic, and trustworthy the binding signal is.
-       ✅ Discovery — Whether the docking suggests new or unexpected interactions worth exploring.
+    Your task is to:
 
-    Interpret `best_score` like this:
-    - Strong signal: ≤ -9 kcal/mol
-    - Moderate signal: -7 to -9 kcal/mol
-    - Weak signal: ≥ -7 kcal/mol
+    1. Analyze **target relevance**:
+        - Identify if any Open Targets proteins are *direct targets* or *mechanistically relevant*.
+    2. Analyze **SMILES-based binding likelihood**:
+        - Check if the chemical structure suggests compatibility with the target class (transporters, enzymes, nuclear receptors, GPCRs, etc.)
+    3. Score binding confidence heuristically (0 to 1):
+        - Strong ≤ 0.85
+        - Moderate 0.6–0.85
+        - Weak ≥ 0.6
+    4. Generate **discovery insight**:
+        - Detect any structural hints that suggest *unexpected protein binding possibilities* not obvious from the target list.
+    5. Give a **repurposing recommendation**:
+        - "prioritize", "maybe explore", or "not ideal"
 
-    Your output must include:
+    Return your analysis in short, intuitive text and a JSON summary.
 
-    🔹 Binding Score: the best_score value from docking
-    🔹 Strength Label: strong / moderate / weak
-    🔹 Biological Plausibility (confidence): judge if the protein site is realistically druggable based on size, polarity, transporter type, enzymatic cavity characteristics, etc.
-    🔹 Novelty Insight (discovery): point out any unexpected strong binding to proteins not normally linked to the drug class
-    🔹 Repurposing Note: brief yes/no/maybe on whether to prioritize this drug for repurposing based on the score + confidence + novelty combined.
+    DO NOT hallucinate unknown protein targets.
+    Explain intuitively.
+"""
+import requests
 
-    You should NOT hallucinate missing details.
-    You can say "inconclusive" if docking log is unclear.
-    Keep explanations intuitive and crisp.
+def enrich_compound_targets(smiles: str, cutoff: float) -> dict:
     """
+    Get protein targets and bioactivity evidence for a compound using its SMILES.
+    More negative affinity values (e.g., low IC50, high Ki/Kd) indicate stronger activity.
+    This helps analyze drug effects and target overlap for repurposing.
+    """
+    url = "https://bindingdb.org/rest/getTargetByCompound"
+    response = requests.get(
+        url,
+        params={
+            "smiles": smiles,
+            "cutoff": cutoff,
+            "response": "application/json"
+        },
+        timeout=30
+    )
+
+    try:
+        return response.json()
+    except:
+        return {"success": False, "error": "Could not parse JSON response"}
+
 
 docking_agent = Agent(
     name="Docking Specialist",
     instructions=INSTRUCTIONS,
-    tools=[dock_molecule]
+    model="gpt-4o-mini",
+    tools=[enrich_compound_targets]
 )

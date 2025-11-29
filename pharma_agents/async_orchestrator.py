@@ -1,7 +1,8 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 import traceback
+import json
 from pydantic import BaseModel
 from agents import Runner
 
@@ -9,26 +10,29 @@ from agents import Runner
 from .web_intelligence_research_agent import web_intelligence_agent
 from .patent_research_agent import patent_research_agent
 from .clinical_trails_research_agent import clinical_trials_agent
-from .chembl_research_agent import chembl_insights_agent
-from .open_targets_research_agent import open_targets_agent_sdk
 from .market_insights_agent import market_insights_agent
 from .exim_trade_agent import exim_trade_agent
-from .disease_pathway_agent import disease_pathway_agent
-from .repurposing_strategy_agent import repurposing_strategy_agent
 from .report_generation_agent import report_generation_agent
+from .repurposing_interpretation_agent import repurposing_interpretation_agent
+
+# Import unified pipeline tool directly (logic function, not the tool wrapper)
+from .tools.unified_repurposing_pipeline import run_repurposing_pipeline_logic
 
 
 # Results container
 class PharmaResearchContext(BaseModel):
+    # New pipeline data
+    unified_pipeline_data: Optional[Dict[str, Any]] = None
+    interpretation: Optional[str] = None
+    
+    # Contextual data from other agents
     web_intelligence: Optional[str] = None
     patents: Optional[str] = None
     clinical_trials: Optional[str] = None
-    chembl: Optional[str] = None
-    open_targets: Optional[str] = None
     market: Optional[str] = None
     exim: Optional[str] = None
-    pathway: Optional[str] = None
-    strategy: Optional[str] = None
+    
+    # Final output
     report: Optional[str] = None
     errors: Optional[str] = None
 
@@ -112,64 +116,68 @@ async def run_agent_local(agent, prompt: str, assign_field: str, context: Pharma
         context.errors = error_trace if not context.errors else f"{context.errors}\n\n{error_trace}"
 
 
-# Phase 1: Run data collectors in parallel
-async def run_parallel_collectors(disease: str, context: PharmaResearchContext, drug: Optional[str]=None):
-    """Launch all data collectors concurrently."""
-    if drug:
-        query = f"Gather global intelligence for repurposing {drug} to treat {disease}"
-    else:
-        query = f"Gather global intelligence for drug repurposing options to treat {disease}"
+# Phase 1: Run Unified Pipeline (Deterministic)
+async def run_unified_pipeline(query: str, context: PharmaResearchContext):
+    """Run the deterministic unified pipeline tool directly."""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] → unified_pipeline started")
+    try:
+        # Call the tool function directly (it's a python function)
+        # Note: run_repurposing_pipeline_logic is the undecorated function
+        
+        # We need to run this in a thread pool to avoid blocking the async loop
+        # since it makes synchronous HTTP requests
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_repurposing_pipeline_logic, query)
+        
+        context.unified_pipeline_data = result
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ✓ unified_pipeline completed")
+        
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ✗ unified_pipeline failed: {e}")
+        context.errors = str(e) if not context.errors else f"{context.errors}\n\n{str(e)}"
 
-    print("📊 Phase 1: Running data collectors in parallel...\n")
+
+# Phase 2: Run Interpretation & Context Agents
+async def run_analysis_and_context(query: str, context: PharmaResearchContext):
+    """Run interpretation agent and other context agents in parallel."""
+    print("\n🧬 Phase 2: Running interpretation and context agents...\n")
     
-    tasks = [
+    tasks = []
+    
+    # 1. Interpretation Agent (analyzes pipeline data)
+    if context.unified_pipeline_data:
+        # Convert data to string for the agent
+        data_str = json.dumps(context.unified_pipeline_data, indent=2)
+        # Truncate if too long (simple safety)
+        if len(data_str) > 100000:
+            data_str = data_str[:100000] + "... (truncated)"
+            
+        interpretation_prompt = f"""
+        Analyze the following enriched drug repurposing data for '{query}':
+        
+        {data_str}
+        
+        Provide a detailed interpretation including:
+        1. Primary vs Off-target classification
+        2. Mechanism of Action relevance
+        3. Repurposing opportunities with confidence scores
+        4. Safety assessment
+        """
+        tasks.append(run_agent_local(repurposing_interpretation_agent, interpretation_prompt, "interpretation", context))
+    else:
+        context.interpretation = "❌ Unified pipeline failed to produce data."
+    
+    # 2. Context Agents (Web, Patents, Trials, Market, Exim)
+    # These run in parallel with interpretation
+    tasks.extend([
         run_agent_local(web_intelligence_agent, query, "web_intelligence", context),
         run_agent_local(patent_research_agent, query, "patents", context),
         run_agent_local(clinical_trials_agent, query, "clinical_trials", context),
-        run_agent_local(chembl_insights_agent, query, "chembl", context),
-        run_agent_local(open_targets_agent_sdk, query, "open_targets", context),
         run_agent_local(market_insights_agent, query, "market", context),
         run_agent_local(exim_trade_agent, query, "exim", context)
-    ]
-
+    ])
+    
     await asyncio.gather(*tasks)
-
-
-# Phase 2: Run pathway and strategy agents sequentially
-async def run_analysis_agents(disease: str, context: PharmaResearchContext):
-    """Run pathway and strategy agents sequentially using data from phase 1."""
-    print("\n🧬 Phase 2: Running analysis agents sequentially...\n")
-    
-    # Pathway agent analyzes the collected data
-    pathway_prompt = f"""
-            Analyze the following research data for {disease} and identify mechanistic pathways:
-
-            Web Intelligence: {context.web_intelligence}
-            Patents: {context.patents}
-            Clinical Trials: {context.clinical_trials}
-            ChEMBL Data: {context.chembl}
-            Open Targets: {context.open_targets}
-            Market Data: {context.market}
-            EXIM Data: {context.exim}
-
-            Provide mechanistic validation for drug repurposing opportunities.
-        """
-    
-    await run_agent_local(disease_pathway_agent, pathway_prompt, "pathway", context)
-    
-    # Strategy agent ranks candidates using pathway analysis
-    strategy_prompt = f"""
-        Based on the following research and pathway analysis for {disease}, rank drug repurposing candidates:
-
-        Pathway Analysis: {context.pathway}
-        Clinical Trials: {context.clinical_trials}
-        Patents: {context.patents}
-        Market Data: {context.market}
-
-        Provide a ranked list of repurposing candidates with feasibility scores.
-    """
-    
-    await run_agent_local(repurposing_strategy_agent, strategy_prompt, "strategy", context)
 
 
 # Phase 3: Generate final report
@@ -180,6 +188,12 @@ async def generate_final_report(disease: str, context: PharmaResearchContext):
     prompt_block = f"""
         Synthesize the following global pharmaceutical research findings into a polished executive report for {disease}:
 
+        # SCIENTIFIC & MECHANISTIC VALIDATION (Core Evidence)
+        {context.unified_pipeline_data}
+        {context.interpretation}
+
+        # GLOBAL CONTEXT
+        
         Web Intelligence Findings:
         {context.web_intelligence}
 
@@ -189,26 +203,15 @@ async def generate_final_report(disease: str, context: PharmaResearchContext):
         Global Clinical Trial Intelligence:
         {context.clinical_trials}
 
-        Compound-level Mechanisms and Bioactivity:
-        {context.chembl}
-
-        Validated Targets and Genetic Associations:
-        {context.open_targets}
-
         Market, Regulatory Approvals, Pricing, Competitors:
         {context.market}
 
         Export-Import Global Trade Dependency Summary:
         {context.exim}
 
-        Target-Disease Mechanistic Validation:
-        {context.pathway}
-
-        Repurposing Strategy and Ranking Insights:
-        {context.strategy}
-
         Do NOT speculate. If data was missing, summarize the gap briefly.
         Generate a visually structured report with narrative clarity and concise tables.
+        Ensure the "Repurposing Practical Score" from the interpretation is highlighted.
     """
 
     await run_agent_local(report_generation_agent, prompt_block, "report", context)
@@ -219,30 +222,35 @@ async def run_pipeline(disease: str, drug: Optional[str]=None) -> PharmaResearch
     """Run the full pharmaceutical research pipeline and return results."""
     context = PharmaResearchContext()
     
-    print("\n🚀 Starting Pharmaceutical Research Pipeline")
-    print(f"Disease: {disease}")
+    # Construct query based on input
     if drug:
-        print(f"Drug: {drug}")
+        query = drug  # Pipeline A input
+        report_subject = f"{drug} (for {disease})"
+    else:
+        query = disease  # Pipeline B input
+        report_subject = disease
+        
+    print("\n🚀 Starting Pharmaceutical Research Pipeline")
+    print(f"Query: {query}")
+    print(f"Target Disease: {disease}")
     print("="*80 + "\n")
     
     start = datetime.now()
 
-    # Phase 1: Data collection (parallel)
-    await run_parallel_collectors(disease, context, drug)
+    # Phase 1: Run Unified Pipeline (Deterministic Data Collection)
+    await run_unified_pipeline(query, context)
     
-    # Phase 2: Analysis (sequential)
-    await run_analysis_agents(disease, context)
-    
-    # Phase 3: Report generation
-    await generate_final_report(disease, context)
-    
-    end = datetime.now()
+    # Phase 2: Run Interpretation & Context Agents (Parallel)
+    # We pass the full query string to context agents
+    context_query = f"Gather global intelligence for repurposing {drug} to treat {disease}" if drug else f"Gather global intelligence for drug repurposing options to treat {disease}"
+    await run_analysis_and_context(context_query, context)
 
-    print(f"\n{'='*80}")
-    print(f"🎯 Total pipeline time: {(end-start).total_seconds():.2f} seconds")
-    print(f"{'='*80}\n")
-    print("\n---------- FINAL REPORT OUTPUT ----------\n")
-    print(context.report)
+    # Phase 3: Generate Report
+    await generate_final_report(report_subject, context)
+
+    end = datetime.now()
+    duration = (end - start).total_seconds()
+    print(f"\n✅ Research completed in {duration:.2f} seconds")
     
     return context
 

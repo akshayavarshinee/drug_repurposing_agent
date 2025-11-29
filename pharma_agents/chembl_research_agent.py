@@ -8,54 +8,6 @@ from typing import Optional, Dict, Any, Union
 # from .schemas import ChemblDrugInsight
 dotenv.load_dotenv(override=True)
 
-# INSTRUCTIONS = (
-#     """
-#     You are a medicinal chemistry expert with deep knowledge of the ChEMBL bioactivity database.
-#     You excel at finding drug-like molecules, analyzing their properties, performing similarity
-#     and substructure searches, and retrieving comprehensive bioactivity data. You have direct
-#     access to the ChEMBL API for querying millions of compounds, targets, assays, and activities.
-#     You can search by molecular properties (MW, LogP), chemical structures (SMILES), target names,
-#     and disease indications. YOU MUST use the ChEMBL tool to retrieve REAL data - never generate
-#     placeholder information. You should not just fetch results but also provide interpretation 
-#     and analysis of the data. You output should be suitable for an academic publication.
-#     Extract molecular, target, drug, and bioactivity data from ChEMBL database using API tools.
-#     Find molecules by properties, perform chemical structure searches, and retrieve drug mechanisms.
-#     You are a pharmaceutical intelligence synthesis agent specialized in global drug repurposing.
-
-#     Your goals are:
-#     1. Analyze API tool results and extract mechanistic and evidence-based repurposing insights.
-#     2. Identify target → pathway → disease relevance links.
-#     3. Highlight safety, feasibility, and rationale quality signals.
-#     4. Produce outputs that help downstream ML or reporting agents.
-
-#     When tool results are returned, follow this reasoning method rigorously:
-
-#     REPURPOSING RATIONALE EXTRACTION RULES:
-#     - Prioritize human drug-target relationships, binding strength (e.g., Ki, IC50, pChEMBL values), and mechanisms of action.
-#     - Identify if any retrieved targets, pathways, or metabolites intersect with disease biology or clinical unmet needs.
-#     - Pay special attention to OFF-TARGET effects or multi-pathway involvement — these are often the richest repurposing signals.
-#     - If known approved indications are present, propose novel indications that are mechanistically adjacent but clinically distinct.
-#     - If global clinical-trial data is returned, detect trends like:
-#     • under-explored regions
-#     • high trial failure rates
-#     • opportunities for orphan or emerging indications
-#     - If chemical similarity search results are returned, cluster or rank drugs that resemble known therapeutics for the target disease.
-#     - If patent data is returned, extract:
-#     • competing repurposing claims
-#     • white-space opportunity areas
-#     • cross-country prior-art novelty gaps
-#     - Always separate hypothesis from evidence and confidence score repurposing logic.
-
-#     ADDITIONAL INSTRUCTIONS:
-#     - Never crash if a tool has returned an error or empty result.
-#     - If no strong mechanistic repurposing logic can be derived from tool results, return:
-#     {"repurposing_candidates": [], "rationale_summary": "No actionable MOA or pathway overlap found", "confidence_score": 0.0}
-#     - Keep responses concise, non-formal in explanation tone, and globally scoped.
-#     - Focus on quality reasoning, not response length or code.
-
-#     """
-# )
-
 INSTRUCTIONS = (
     """
     You are a medicinal chemistry and bioactivity intelligence agent with deep knowledge of the
@@ -154,6 +106,7 @@ INSTRUCTIONS = (
 )
 
 
+# 
 @function_tool
 def chembl_api_tool(
     resource: str,
@@ -167,53 +120,58 @@ def chembl_api_tool(
 ) -> Dict[str, Any]:
     """
     Query the ChEMBL API for pharmaceutical and bioactivity data.
-
-    Supports:
-    - keyword or fielded search
-    - substructure & similarity (global chemical search)
-    - molecule/target/assay/drug/indication/images
-    - pagination
     """
+
     base_url = "https://www.ebi.ac.uk/chembl/api/data"
+
     valid_resources = [
-        "molecule", "target", "assay", "activity", "drug", "drug_indication",
-        "mechanism", "biotherapeutic", "cell_line", "document", "tissue",
-        "organism", "protein_classification", "atc_class", "binding_site",
+        "molecule", "target", "assay",
+        "activity",   # ✅ correct endpoint name
+        "mechanism",  # ✅ exists as /mechanism.json
+        "drug_indication",  # /drug_indication.json ✅
+        "drug_warning",     # /drug_warning.json ✅
+        "atc_class", "binding_site", "cell_line",
         "similarity", "substructure", "image", "status"
     ]
 
     if resource not in valid_resources:
-        return {"error": f"Invalid resource '{resource}'.", "valid_options": valid_resources}
+        return {"found": False, "error": "Invalid resource"}
 
     if smiles:
         smiles = urllib.parse.quote(smiles, safe="")
 
+    # Build URL correctly
     if resource == "similarity" and smiles:
-        url = f"{base_url}/similarity/{smiles}/{similarity_cutoff}.{format_type}"
+        url = f"{base_url}/similarity/{smiles}/{similarity_cutoff}.json"
     elif resource == "substructure" and smiles:
-        url = f"{base_url}/substructure/{smiles}.{format_type}"
+        url = f"{base_url}/substructure/{smiles}.json"
     elif resource == "image" and chembl_id:
-        url = f"{base_url}/image/{chembl_id}.{format_type}"
+        url = f"{base_url}/image/{chembl_id}.svg"  # image returns SVG
     elif chembl_id:
-        url = f"{base_url}/{resource}/{chembl_id}.{format_type}"
+        url = f"{base_url}/{resource}/{chembl_id}.json"
     else:
-        url = f"{base_url}/{resource}.{format_type}"
+        url = f"{base_url}/{resource}.json"
 
-
-    params: Dict[str, Any] = {}
+    # Params handling
+    params = {}
     if search_query:
         params["q"] = search_query
-    params["limit"] = min(limit, 1000)
+    params["limit"] = min(limit, 100)
     params["offset"] = offset
 
-
     try:
-        headers = {"User-Agent": "pharma-research-agent/1.0", "Accept": "application/json"}
+        headers = {"Accept": "application/json"}
         resp = requests.get(url, params=params, headers=headers, timeout=20)
-        resp.raise_for_status()
-        return {"data": resp.json(), "_query_metadata": {"resource": resource, "url": url, "params": params}}
+
+        if not resp.text.strip():
+            return {"found": False, "lincs_id": None}
+
+        return {
+            "found": True,
+            "data": resp.json()
+        }
     except Exception as e:
-        return {"error": str(e), "url": url, "params": params}
+        return {"found": False, "error": str(e)}
 
 
 
