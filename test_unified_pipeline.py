@@ -16,7 +16,7 @@ async def test_drug_pipeline():
     
     result = await Runner.run(
         unified_pipeline_agent,
-        input="Analyze Metformin for repurposing opportunities",
+        input="Analyze Imatinib for repurposing opportunities",
         max_turns=3
     )
     

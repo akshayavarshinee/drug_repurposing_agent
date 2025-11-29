@@ -120,3 +120,6 @@ def open_targets_disease_lookup(
         print("[Open Targets] Unexpected error ❌")
         print(traceback.format_exc())
         return []
+
+
+open_targets_disease_lookup("Diabetes")

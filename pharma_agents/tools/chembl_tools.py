@@ -10,36 +10,123 @@ def chembl_search_molecule(drug_name: str) -> Optional[dict]:
     - ChEMBL ID
     - Canonical SMILES
     - Preferred name
+    
+    Uses ChEMBL API filtering and search endpoints for accurate results.
     """
-    search_url = f"{BASE_URL}/molecule?format=json"
-    params = {"q": drug_name, "limit": 5}
-
+    drug_name_clean = drug_name.strip()
+    
+    # Strategy 1: Try exact match on pref_name (case-insensitive)
+    # https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=metformin
     try:
-        resp = requests.get(search_url, params=params, timeout=20)
+        url = f"{BASE_URL}/molecule.json"
+        params = {"pref_name__iexact": drug_name_clean, "limit": 1}
+        
+        resp = requests.get(url, params=params, timeout=20)
         resp.raise_for_status()
         data = resp.json()
+        
         molecules = data.get("molecules", [])
-
-        for mol in molecules:
-            pref_name = mol.get("pref_name")
-            if pref_name and pref_name.lower() == drug_name.lower():
-                return {
-                    "chembl_id": mol["molecule_chembl_id"],
-                    "smiles": mol.get("molecule_structures", {}).get("canonical_smiles"),
-                    "name": pref_name
-                }
-
         if molecules:
             mol = molecules[0]
+            print(f"[ChEMBL] Found exact pref_name match: {mol.get('pref_name')}")
             return {
                 "chembl_id": mol["molecule_chembl_id"],
                 "smiles": mol.get("molecule_structures", {}).get("canonical_smiles"),
                 "name": mol.get("pref_name")
             }
-
     except Exception as e:
-        print(f"ChEMBL search error: {e}")
-
+        print(f"[ChEMBL] Exact name search error: {e}")
+    
+    # Strategy 2: Use full-text search endpoint
+    # https://www.ebi.ac.uk/chembl/api/data/molecule/search.json?q=metformin
+    try:
+        url = f"{BASE_URL}/molecule/search.json"
+        params = {"q": drug_name_clean, "limit": 20}
+        
+        resp = requests.get(url, params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        molecules = data.get("molecules", [])
+        if molecules:
+            # Look for exact match in pref_name or synonyms
+            drug_name_lower = drug_name_clean.lower()
+            
+            # First pass: exact pref_name match
+            for mol in molecules:
+                pref_name = mol.get("pref_name", "")
+                if pref_name and pref_name.lower() == drug_name_lower:
+                    print(f"[ChEMBL] Found in search results: {pref_name}")
+                    return {
+                        "chembl_id": mol["molecule_chembl_id"],
+                        "smiles": mol.get("molecule_structures", {}).get("canonical_smiles"),
+                        "name": pref_name
+                    }
+            
+            # Second pass: check synonyms for exact match
+            best_match = None
+            best_score = 0
+            
+            for mol in molecules:
+                synonyms = mol.get("molecule_synonyms", [])
+                max_phase = mol.get("max_phase") or 0
+                
+                for syn_entry in synonyms:
+                    syn_value = syn_entry.get("molecule_synonym", "")
+                    syn_type = syn_entry.get("syn_type", "")
+                    
+                    if syn_value.lower() == drug_name_lower:
+                        # Score: prioritize INN/USAN and approved drugs
+                        score = max_phase * 10
+                        if syn_type in ["INN", "USAN"]:
+                            score += 100
+                        elif syn_type == "BAN":
+                            score += 50
+                        elif syn_type in ["TRADE_NAME", "ATC"]:
+                            score += 25
+                        else:
+                            score += 10
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_match = (mol, syn_value)
+            
+            if best_match:
+                mol, matched_name = best_match
+                print(f"[ChEMBL] Found synonym match: {matched_name}")
+                return {
+                    "chembl_id": mol["molecule_chembl_id"],
+                    "smiles": mol.get("molecule_structures", {}).get("canonical_smiles"),
+                    "name": matched_name
+                }
+            
+            # Third pass: return highest max_phase result
+            if molecules:
+                sorted_mols = sorted(molecules, key=lambda m: (m.get("max_phase") or 0), reverse=True)
+                mol = sorted_mols[0]
+                
+                # Get best name
+                name = mol.get("pref_name")
+                if not name:
+                    synonyms = mol.get("molecule_synonyms", [])
+                    for syn in synonyms:
+                        if syn.get("syn_type") in ["INN", "USAN", "BAN"]:
+                            name = syn.get("molecule_synonym")
+                            break
+                    if not name and synonyms:
+                        name = synonyms[0].get("molecule_synonym")
+                
+                print(f"[ChEMBL] Using best match from search: {name}")
+                return {
+                    "chembl_id": mol["molecule_chembl_id"],
+                    "smiles": mol.get("molecule_structures", {}).get("canonical_smiles"),
+                    "name": name
+                }
+    
+    except Exception as e:
+        print(f"[ChEMBL] Full-text search error: {e}")
+    
+    print(f"[ChEMBL] No results found for '{drug_name_clean}'")
     return None
 
 
@@ -61,7 +148,15 @@ def chembl_get_molecule(chembl_id: str) -> Optional[Dict[str, Any]]:
 
 
 def chembl_mechanisms(chembl_id: str) -> List[Dict[str, Any]]:
-    """Fetch mechanism of action data."""
+    """
+    Fetch mechanism of action data.
+    
+    Args:
+        chembl_id: ChEMBL molecule ID (e.g., CHEMBL1431)
+        
+    Returns:
+        List of mechanism dictionaries containing action type, mechanism description, and target info.
+    """
     url = f"{BASE_URL}/mechanism.json"
     params = {"molecule_chembl_id": chembl_id, "limit": 50}
     try:
@@ -78,12 +173,20 @@ def chembl_mechanisms(chembl_id: str) -> List[Dict[str, Any]]:
             for m in data.get("mechanisms", [])
         ]
     except Exception as e:
-        print(f"ChEMBL MoA fetch error: {e}")
+        print(f"[ChEMBL] MoA fetch error for {chembl_id}: {e}")
         return []
 
 
 def chembl_drug_indications(chembl_id: str) -> List[str]:
-    """Fetch known therapeutic indications."""
+    """
+    Fetch known therapeutic indications.
+    
+    Args:
+        chembl_id: ChEMBL molecule ID
+        
+    Returns:
+        List of indication names (Mesh headings or EFO terms).
+    """
     url = f"{BASE_URL}/drug_indication.json"
     params = {"molecule_chembl_id": chembl_id, "limit": 50}
 
@@ -97,12 +200,20 @@ def chembl_drug_indications(chembl_id: str) -> List[str]:
             if ind.get("mesh_heading") or ind.get("efo_term")
         ]
     except Exception as e:
-        print(f"ChEMBL indication fetch error: {e}")
+        print(f"[ChEMBL] Indication fetch error for {chembl_id}: {e}")
         return []
 
 
 def chembl_drug_warnings(chembl_id: str) -> List[Dict[str, Any]]:
-    """Fetch safety warnings."""
+    """
+    Fetch safety warnings.
+    
+    Args:
+        chembl_id: ChEMBL molecule ID
+        
+    Returns:
+        List of warning dictionaries.
+    """
     url = f"{BASE_URL}/drug_warning.json"
     params = {"molecule_chembl_id": chembl_id, "limit": 50}
     try:
@@ -118,7 +229,7 @@ def chembl_drug_warnings(chembl_id: str) -> List[Dict[str, Any]]:
             for w in data.get("drug_warnings", [])
         ]
     except Exception as e:
-        print(f"ChEMBL safety warning error: {e}")
+        print(f"[ChEMBL] Safety warning fetch error for {chembl_id}: {e}")
         return []
 
 

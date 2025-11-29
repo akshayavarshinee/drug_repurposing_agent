@@ -38,6 +38,6 @@ Be mechanistic, analytical, and confident.
 unified_pipeline_agent = Agent(
     name="unified_pipeline_agent",
     instructions=INSTRUCTIONS,
-    model="gpt-4o",   # ✅ STRONG MODEL = deeper reasoning
+    model="gpt-4o-mini",   # ✅ STRONG MODEL = deeper reasoning
     tools=[run_repurposing_pipeline]
 )

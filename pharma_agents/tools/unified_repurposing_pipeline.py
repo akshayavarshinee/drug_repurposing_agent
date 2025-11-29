@@ -12,7 +12,6 @@ from .chembl_tools import (
     chembl_drugs_for_target
 )
 from .bindingdb_tool import bindingdb_get_targets
-from .lincs_tools import lincs_fetch_molecules, lincs_mechanism_of_action
 from .europe_pmc_tool import europe_pmc_count
 
 def detect_input_type(query: str) -> Tuple[str, str]:
@@ -46,14 +45,15 @@ def detect_input_type(query: str) -> Tuple[str, str]:
     # Get first word for drug detection
     word = clean.split()[0].strip(",.:;!?")
     
-    drug_suffixes = ["mab", "nib", "vir", "stat", "pril", "ine", "olol", "azole", "mycin", "cycline", "floxacin", "cillin"]
+    drug_suffixes = ["tide", "mide", "mab", "nib", "vir", "stat", "pril", "ine", "olol", "azole", "mycin", "cycline", "floxacin", "cillin"]
     
     known_drugs = [
         "metformin", "aspirin", "ibuprofen", "paracetamol", "insulin",
         "warfarin", "heparin", "morphine", "codeine", "penicillin",
         "atorvastatin", "simvastatin", "omeprazole", "amoxicillin",
         "lisinopril", "levothyroxine", "azithromycin", "metoprolol",
-        "amlodipine", "hydrochlorothiazide", "gabapentin", "sertraline"
+        "amlodipine", "hydrochlorothiazide", "gabapentin", "sertraline",
+        "semaglutide", "thiazolidinedione", "Thalidomide"
     ]
 
     if word.lower() in known_drugs or any(word.lower().endswith(s) for s in drug_suffixes):
@@ -77,7 +77,6 @@ def execute_drug_pipeline(drug: str) -> dict:
         "chembl_indications": [],
         "chembl_warnings": [],
         "chembl_similar": [],
-        "lincs_moa": {},
         "_analysis_ready": True
     }
 
@@ -96,17 +95,21 @@ def execute_drug_pipeline(drug: str) -> dict:
     
     if result["smiles"]:
         print(f"[Pipeline A] Step 2: Fetching BindingDB targets...")
-        result["bindingdb_all_targets"] = bindingdb_get_targets(result["smiles"], cutoff=10.0)
-        print(f"[Pipeline A] ✓ Found {len(result['bindingdb_all_targets'])} BindingDB targets")
+        all_targets = bindingdb_get_targets(result["smiles"], similarity_cutoff=0.85, affinity_cutoff=10.0)
+        print(f"[Pipeline A] ✓ Found {len(all_targets)} BindingDB targets")
+        # Truncate to top 20 to avoid token limits
+        result["bindingdb_all_targets"] = sorted(all_targets, key=lambda x: x.get("affinity_value_uM", 999))[:20]
 
     if result["chembl_id"]:
         print(f"[Pipeline A] Step 3: Fetching mechanisms...")
-        result["chembl_mechanisms"] = chembl_mechanisms(result["chembl_id"])
-        print(f"[Pipeline A] ✓ Found {len(result['chembl_mechanisms'])} mechanisms")
+        mechanisms = chembl_mechanisms(result["chembl_id"])
+        print(f"[Pipeline A] ✓ Found {len(mechanisms)} mechanisms")
+        result["chembl_mechanisms"] = mechanisms[:20]
         
         print(f"[Pipeline A] Step 4: Fetching indications...")
-        result["chembl_indications"] = chembl_drug_indications(result["chembl_id"])
-        print(f"[Pipeline A] ✓ Found {len(result['chembl_indications'])} indications")
+        indications = chembl_drug_indications(result["chembl_id"])
+        print(f"[Pipeline A] ✓ Found {len(indications)} indications")
+        result["chembl_indications"] = indications[:20]
         
         print(f"[Pipeline A] Step 5: Fetching warnings...")
         result["chembl_warnings"] = chembl_drug_warnings(result["chembl_id"])
@@ -116,13 +119,7 @@ def execute_drug_pipeline(drug: str) -> dict:
         result["chembl_similar"] = chembl_similarity(result["smiles"], 70)
         print(f"[Pipeline A] ✓ Found {len(result['chembl_similar'])} similar drugs")
 
-    print(f"[Pipeline A] Step 7: Checking LINCS...")
-    lincs = lincs_fetch_molecules(drug)
-    if lincs.get("found") and lincs.get("LSM"):
-        result["lincs_moa"] = lincs_mechanism_of_action(lincs["LSM"])
-        print(f"[Pipeline A] ✓ Found LINCS data")
-    else:
-        print(f"[Pipeline A] ⚠ LINCS data not available")
+    # LINCS removed - using ChEMBL data only
 
     print(f"[Pipeline A] ✅ Pipeline complete\n")
     return result
@@ -177,18 +174,15 @@ def execute_disease_pipeline(disease: str) -> dict:
         info["smiles"] = mol["smiles"]
 
         if info["smiles"]:
-            targets = bindingdb_get_targets(info["smiles"], cutoff=10.0)
-            info["affinity"] = targets
-            result["bindingdb_all_targets"].extend(targets)
+            targets = bindingdb_get_targets(info["smiles"], similarity_cutoff=0.85, affinity_cutoff=10.0)
+            info["affinity"] = sorted(targets, key=lambda x: x.get("affinity_value_uM", 999))[:5]  # Keep only top 5 per drug
+            result["bindingdb_all_targets"].extend(targets[:5])
 
         info["moa"] = chembl_mechanisms(info["chembl_id"])
         info["indications"] = chembl_drug_indications(info["chembl_id"])
         info["warnings"] = chembl_drug_warnings(info["chembl_id"])
 
-        if info.get("drug_name"):
-            lincs = lincs_fetch_molecules(info["drug_name"])
-            if lincs.get("found") and lincs.get("LSM"):
-                info["lincs_moa"] = lincs_mechanism_of_action(lincs["LSM"])
+        # LINCS removed - using ChEMBL mechanisms instead
 
         # ✅ FIX: Proper PMC query using real drug name
         if info.get("drug_name"):

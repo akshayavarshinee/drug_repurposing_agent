@@ -13,7 +13,7 @@ from .clinical_trails_research_agent import clinical_trials_agent
 from .market_insights_agent import market_insights_agent
 from .exim_trade_agent import exim_trade_agent
 from .report_generation_agent import report_generation_agent
-from .repurposing_interpretation_agent import repurposing_interpretation_agent
+# from .repurposing_interpretation_agent import repurposing_interpretation_agent
 
 # Import unified pipeline tool directly (logic function, not the tool wrapper)
 from .tools.unified_repurposing_pipeline import run_repurposing_pipeline_logic
@@ -23,7 +23,7 @@ from .tools.unified_repurposing_pipeline import run_repurposing_pipeline_logic
 class PharmaResearchContext(BaseModel):
     # New pipeline data
     unified_pipeline_data: Optional[Dict[str, Any]] = None
-    interpretation: Optional[str] = None
+    # interpretation: Optional[str] = None
     
     # Contextual data from other agents
     web_intelligence: Optional[str] = None
@@ -144,28 +144,28 @@ async def run_analysis_and_context(query: str, context: PharmaResearchContext):
     
     tasks = []
     
-    # 1. Interpretation Agent (analyzes pipeline data)
-    if context.unified_pipeline_data:
-        # Convert data to string for the agent
-        data_str = json.dumps(context.unified_pipeline_data, indent=2)
-        # Truncate if too long (simple safety)
-        if len(data_str) > 100000:
-            data_str = data_str[:100000] + "... (truncated)"
+    # # 1. Interpretation Agent (analyzes pipeline data)
+    # if context.unified_pipeline_data:
+    #     # Convert data to string for the agent
+    #     data_str = json.dumps(context.unified_pipeline_data, indent=2)
+    #     # Truncate if too long (simple safety)
+    #     if len(data_str) > 100000:
+    #         data_str = data_str[:100000] + "... (truncated)"
             
-        interpretation_prompt = f"""
-        Analyze the following enriched drug repurposing data for '{query}':
+    #     interpretation_prompt = f"""
+    #     Analyze the following enriched drug repurposing data for '{query}':
         
-        {data_str}
+    #     {data_str}
         
-        Provide a detailed interpretation including:
-        1. Primary vs Off-target classification
-        2. Mechanism of Action relevance
-        3. Repurposing opportunities with confidence scores
-        4. Safety assessment
-        """
-        tasks.append(run_agent_local(repurposing_interpretation_agent, interpretation_prompt, "interpretation", context))
-    else:
-        context.interpretation = "❌ Unified pipeline failed to produce data."
+    #     Provide a detailed interpretation including:
+    #     1. Primary vs Off-target classification
+    #     2. Mechanism of Action relevance
+    #     3. Repurposing opportunities with confidence scores
+    #     4. Safety assessment
+    #     """
+    #     tasks.append(run_agent_local(repurposing_interpretation_agent, interpretation_prompt, "interpretation", context))
+    # else:
+    #     context.interpretation = "❌ Unified pipeline failed to produce data."
     
     # 2. Context Agents (Web, Patents, Trials, Market, Exim)
     # These run in parallel with interpretation
@@ -190,7 +190,7 @@ async def generate_final_report(disease: str, context: PharmaResearchContext):
 
         # SCIENTIFIC & MECHANISTIC VALIDATION (Core Evidence)
         {context.unified_pipeline_data}
-        {context.interpretation}
+        
 
         # GLOBAL CONTEXT
         
