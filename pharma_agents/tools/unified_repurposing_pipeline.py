@@ -14,7 +14,7 @@ from .chembl_tools import (
     chembl_drugs_for_target
 )
 from .bindingdb_tool import bindingdb_get_targets
-from .europe_pmc_tool import europe_pmc_count
+# from .europe_pmc_tool import europe_pmc_count
 
 # Import missing agents/tools
 from ..clinical_trails_research_agent import clinical_trials_research_logic, ClinicalTrialsToolInput
