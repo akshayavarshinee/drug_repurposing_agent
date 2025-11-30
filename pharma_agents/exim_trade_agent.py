@@ -116,84 +116,59 @@ INSTRUCTIONS = """
 
 
 @function_tool
-def un_comtrade_exim_tool(
+def serper_trade_tool(
     hs_code: str,
-    year: int = 2025,
-    flow: Optional[str] = None,
-    frequency: str = "A",
-    max_records: int = 500,
-    reporter: Optional[str] = None,
-    partner: Optional[str] = None
-) -> Dict[str, Any]:
+    year: int = 2024,
+    flow: Optional[str] = None
+) -> str:
     """
-    Fetch global EXIM trade data from UN Comtrade and return analytics-friendly summaries.
-    Reporter/partner default: world aggregate if not specified.
+    Search for global EXIM trade trends and data using web search.
+    Useful for finding export/import volumes, top partner countries, and supply chain trends.
+    
+    Args:
+        hs_code: The HS Code or Drug Name to search trade data for (e.g. '3004' or 'Metformin')
+        year: The year to focus the search on (default 2024)
+        flow: Optional flow direction 'import' or 'export'
     """
+    return serper_trade_tool_logic(hs_code, year, flow)
 
-    # --- Validation to avoid API failures ---
-    if not hs_code or not hs_code.strip():
-        return {"error": "HS code is required."}
-
-    freq = frequency.upper() if frequency else "A"
-    if freq not in ["A", "M"]:
-        return {"error": "frequency must be 'A' (annual) or 'M' (monthly)."}
-
-    # Format period correctly
-    period = str(year) if freq == "A" else str(year) + "01"  # default to Jan for monthly
-
-    # Flexible global reporter/partner
-    reporter_code = reporter if reporter else "all"
-    partner_code = partner if partner else "all"
-
-    base_url = "CORS-safe global EXIM query endpoint"
-    params = {
-        "reporterCode": reporter_code,
-        "partnerCode": partner_code,
-        "period": period,
-        "cmdCode": hs_code.strip(),
-        "includeDesc": "true",
-        "format": "json",
+def serper_trade_tool_logic(
+    hs_code: str,
+    year: int = 2024,
+    flow: Optional[str] = None
+) -> str:
+    """
+    Core logic for trade search, callable directly.
+    """
+    # Construct a targeted search query
+    query_parts = [f"{hs_code} trade data {year}"]
+    if flow:
+        query_parts.append(f"{flow} statistics")
+    else:
+        query_parts.append("export import trends")
+    
+    query_parts.append("top countries value")
+    
+    search_query = " ".join(query_parts)
+    
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({"q": search_query})
+    
+    api_key = os.environ.get("SERPER_API_KEY")
+    if not api_key:
+        return json.dumps({"error": "Missing SERPER_API_KEY environment variable."})
+        
+    headers = {
+        'X-API-KEY': api_key,
+        'Content-Type': 'application/json'
     }
 
-    if flow:
-        if flow.upper() not in ["M", "X"]:
-            return {"error": "flow must be 'M' (import) or 'X' (export)."}
-        params["flowCode"] = flow.upper()
-
     try:
-        resp = requests.get(base_url, params=params, headers={"User-Agent":"pharma-exim-agent/1.0"}, timeout=15)
-
-        if resp.status_code == 429:
-            return {"error": "Rate limit hit. Try again."}
-
-        resp.raise_for_status()
-        data = resp.json()
-
-        records = data.get("data") if isinstance(data, dict) else None
-        if not records:
-            return {"error":"No trade data found."}
-
-        if not isinstance(records, list):
-            records = [records]
-
-        # --- Simple analytics synthesis ---
-        total = sum(float(r.get("TradeValue") or r.get("value") or 0) for r in records)
-
-        return {
-            "results": records[:max_records],
-            "summary": {
-                "total_trade_usd": total,
-                "reporter": reporter_code,
-                "partner": partner_code,
-                "hs_code": hs_code.strip(),
-                "year": year,
-                "flow": params.get("flowCode","both"),
-            },
-            "confidence_score": 0.85 if total>0 else 0.0
-        }
-
+        response = requests.post(url, headers=headers, data=payload, timeout=15)
+        response.raise_for_status()
+        return response.text
     except Exception as e:
-        return {"error": str(e), "params": params, "_fallback":"request failed"}
+        return json.dumps({"error": f"Search failed: {str(e)}"})
 
 @function_tool
 def trade_search_tool(query: str):
@@ -205,14 +180,14 @@ def trade_search_tool(query: str):
     url = "https://google.serper.dev/search"
 
     payload = json.dumps({
-    "q": query
+        "q": query
     })
     api_key=os.environ.get("SERPER_API_KEY")
     if not api_key:
-        return {"error": "No API key found."}
+        return json.dumps({"error": "No API key found."})
     headers = {
-    'X-API-KEY': api_key,
-    'Content-Type': 'application/json'
+        'X-API-KEY': api_key,
+        'Content-Type': 'application/json'
     }
 
     response = requests.request("POST", url, headers=headers, data=payload)
@@ -224,5 +199,5 @@ exim_trade_agent = Agent(
     name="exim_trade_agent",
     instructions=INSTRUCTIONS,
     model="gpt-4o-mini",
-    tools=[trade_search_tool, un_comtrade_exim_tool]
+    tools=[trade_search_tool, serper_trade_tool]
 )

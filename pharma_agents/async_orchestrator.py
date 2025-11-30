@@ -9,7 +9,7 @@ from agents import Runner
 # Import agents
 from .web_intelligence_research_agent import web_intelligence_agent
 from .patent_research_agent import patent_research_agent
-from .clinical_trails_research_agent import clinical_trials_agent
+from .clinical_trails_research_agent import clinical_trails_research_agent
 from .market_insights_agent import market_insights_agent
 from .exim_trade_agent import exim_trade_agent
 from .report_generation_agent import report_generation_agent
@@ -172,7 +172,7 @@ async def run_analysis_and_context(query: str, context: PharmaResearchContext):
     tasks.extend([
         run_agent_local(web_intelligence_agent, query, "web_intelligence", context),
         run_agent_local(patent_research_agent, query, "patents", context),
-        run_agent_local(clinical_trials_agent, query, "clinical_trials", context),
+        run_agent_local(clinical_trails_research_agent, query, "clinical_trials", context),
         run_agent_local(market_insights_agent, query, "market", context),
         run_agent_local(exim_trade_agent, query, "exim", context)
     ])
@@ -186,9 +186,9 @@ async def generate_final_report(disease: str, context: PharmaResearchContext):
     print("\n📘 Phase 3: Generating final report...\n")
     
     prompt_block = f"""
-        Synthesize the following global pharmaceutical research findings into a polished executive report for {disease}:
+        Synthesize the following global pharmaceutical research findings into a polished academic report for {disease}:
 
-        # SCIENTIFIC & MECHANISTIC VALIDATION (Core Evidence)
+        # SCIENTIFIC & MECHANISTIC VALIDATION (Core Evidence)(Ensure you dont remove anything and give the full input in the final report)
         {context.unified_pipeline_data}
         
 

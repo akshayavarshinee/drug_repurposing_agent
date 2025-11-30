@@ -88,29 +88,29 @@ def europepmc_tool(query: str):
     response = requests.get(url)
     return response.text
 
-@function_tool
-def web_intelligence_tool(query: str):
-    """Search Google Scholar for academic publications.
+# @function_tool
+# def web_intelligence_tool(query: str):
+#     """Search Google Scholar for academic publications.
     
-    Args:
-        query: The search query string
-    """
-    url = "https://google.serper.dev/scholar"
+#     Args:
+#         query: The search query string
+#     """
+#     url = "https://google.serper.dev/scholar"
 
-    payload = json.dumps({
-    "q": query
-    })
-    headers = {
-    'X-API-KEY': os.environ.get("SERPER_API_KEY"),
-    'Content-Type': 'application/json'
-    }
+#     payload = json.dumps({
+#     "q": query
+#     })
+#     headers = {
+#     'X-API-KEY': os.environ.get("SERPER_API_KEY"),
+#     'Content-Type': 'application/json'
+#     }
 
-    response = requests.request("POST", url, headers=headers, data=payload)
-    return response.text
+#     response = requests.request("POST", url, headers=headers, data=payload)
+#     return response.text
 
 web_intelligence_agent = Agent(
     name="web_intelligence_agent",
     instructions=INSTRUCTIONS,
     model="gpt-4o-mini",
-    tools=[web_intelligence_tool, europepmc_tool]
+    tools=[europepmc_tool]
 )

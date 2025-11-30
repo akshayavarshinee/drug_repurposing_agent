@@ -18,7 +18,10 @@ Steps you MUST FOLLOW:
    - chembl_warnings
    - bindingdb_all_targets
    - similar_drugs
-   - lincs_moa
+   - clinical_trials (NEW - extract trial phases, NCT IDs, statuses, results of the trials)
+   - patents (NEW - extract patent numbers, assignees, dates, patent expiry)
+   - trade_data (NEW - extract trade trends, countries, values)
+   - market_data (NEW - extract sales data, market size, revenue)
    - disease_targets (if disease)
 4. Produce a structured executive summary with:
 
@@ -27,7 +30,11 @@ Steps you MUST FOLLOW:
    C) Repurposing Opportunities ranked by confidence
    D) Safety Risks and Contraindications
    E) Supporting Literature counts per repurposed indication
-   F) Repurposing Practical Score computed from deterministic signals
+   F) Clinical Trials Overview (NEW - include phases, statuses, key trials)
+   G) Patent Landscape (NEW - include key patents, assignees, FTO considerations)
+   H) Trade & Supply Chain Analysis (NEW - include trade trends, key markets)
+   I) Market Intelligence (NEW - include sales data, market size, growth trends)
+   J) Repurposing Practical Score computed from deterministic signals
 
 DO NOT limit yourself to 3 lines. Give a verbose output.
 DO provide tables wherever useful.
